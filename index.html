@@ -1,0 +1,519 @@
+import React, { useState } from 'react';
+import { Calculator, Plus, Minus, Equal, X, Divide } from 'lucide-react';
+
+const FractionCalculator = () => {
+  const [display, setDisplay] = useState('0');
+  const [previousValue, setPreviousValue] = useState(null);
+  const [operation, setOperation] = useState(null);
+  const [waitingForNewInput, setWaitingForNewInput] = useState(false);
+  const [inputMode, setInputMode] = useState('whole'); // 'whole', 'fraction'
+  const [currentInput, setCurrentInput] = useState({ numerator: '', denominator: '' });
+
+  // Utility functions for fraction math
+  const gcd = (a, b) => {
+    a = Math.abs(a);
+    b = Math.abs(b);
+    while (b !== 0) {
+      const temp = b;
+      b = a % b;
+      a = temp;
+    }
+    return a;
+  };
+
+  const lcm = (a, b) => (Math.abs(a * b) / gcd(a, b));
+
+  const parseFraction = (str) => {
+    if (str === '0') return { numerator: 0, denominator: 1 };
+    
+    const mixedMatch = str.match(/^(-?\d+)\s+(\d+)\/(\d+)$/);
+    if (mixedMatch) {
+      const whole = parseInt(mixedMatch[1]);
+      const num = parseInt(mixedMatch[2]);
+      const den = parseInt(mixedMatch[3]);
+      const totalNum = Math.abs(whole) * den + num;
+      return { 
+        numerator: whole < 0 ? -totalNum : totalNum, 
+        denominator: den 
+      };
+    }
+
+    const fractionMatch = str.match(/^(-?\d+)\/(\d+)$/);
+    if (fractionMatch) {
+      return { 
+        numerator: parseInt(fractionMatch[1]), 
+        denominator: parseInt(fractionMatch[2]) 
+      };
+    }
+
+    const wholeMatch = str.match(/^(-?\d+)$/);
+    if (wholeMatch) {
+      return { 
+        numerator: parseInt(wholeMatch[1]), 
+        denominator: 1 
+      };
+    }
+
+    return { numerator: 0, denominator: 1 };
+  };
+
+  const simplifyFraction = (numerator, denominator) => {
+    if (denominator === 0) return { numerator: 0, denominator: 1 };
+    if (numerator === 0) return { numerator: 0, denominator: 1 };
+    
+    const commonFactor = gcd(numerator, denominator);
+    let num = numerator / commonFactor;
+    let den = denominator / commonFactor;
+    
+    if (den < 0) {
+      num = -num;
+      den = -den;
+    }
+    
+    return { numerator: num, denominator: den };
+  };
+
+  const formatFraction = (numerator, denominator) => {
+    const simplified = simplifyFraction(numerator, denominator);
+    const { numerator: num, denominator: den } = simplified;
+    
+    if (den === 1) return num.toString();
+    if (den === 0) return 'Error';
+    
+    const whole = Math.floor(Math.abs(num) / den);
+    const remainder = Math.abs(num) % den;
+    
+    if (whole === 0) {
+      return `${num}/${den}`;
+    } else if (remainder === 0) {
+      return (num < 0 ? -whole : whole).toString();
+    } else {
+      const sign = num < 0 ? '-' : '';
+      return `${sign}${whole} ${remainder}/${den}`;
+    }
+  };
+
+  const FractionDisplay = ({ numerator, denominator, size = 'large', showAsInput = false }) => {
+    if (showAsInput) {
+      // Show raw input format like the sample calculator
+      const textSize = size === 'large' ? 'text-5xl' : 'text-3xl';
+      return (
+        <div className="inline-flex flex-col items-center justify-center min-w-[120px]">
+          <div className={`${textSize} font-light leading-none text-gray-800 h-16 flex items-center justify-center`}>
+            {numerator || '_'}
+          </div>
+          <div className="w-20 h-1 bg-gray-800 my-1"></div>
+          <div className={`${textSize} font-light leading-none text-gray-800 h-16 flex items-center justify-center`}>
+            {denominator || '_'}
+          </div>
+        </div>
+      );
+    }
+
+    const simplified = simplifyFraction(numerator, denominator);
+    const { numerator: num, denominator: den } = simplified;
+    
+    const textSize = size === 'large' ? 'text-4xl' : 'text-2xl';
+    
+    if (den === 1) {
+      return <span className={`${textSize} font-light`}>{num}</span>;
+    }
+    if (den === 0) {
+      return <span className={`${textSize} text-red-500`}>Error</span>;
+    }
+    
+    const whole = Math.floor(Math.abs(num) / den);
+    const remainder = Math.abs(num) % den;
+    
+    if (whole === 0) {
+      return (
+        <div className="inline-flex flex-col items-center">
+          <div className={`${textSize} font-light leading-none`}>{num < 0 && remainder !== 0 ? -remainder : remainder}</div>
+          <div className={`border-t-2 border-gray-600 ${textSize} font-light leading-none px-4`}>{den}</div>
+        </div>
+      );
+    } else if (remainder === 0) {
+      return <span className={`${textSize} font-light`}>{num < 0 ? -whole : whole}</span>;
+    } else {
+      const sign = num < 0 ? '-' : '';
+      return (
+        <div className="inline-flex items-center gap-3">
+          <span className={`${textSize} font-light`}>{sign}{whole}</span>
+          <div className="inline-flex flex-col items-center">
+            <div className={`${size === 'large' ? 'text-2xl' : 'text-xl'} font-light leading-none`}>{remainder}</div>
+            <div className={`border-t-2 border-gray-600 ${size === 'large' ? 'text-2xl' : 'text-xl'} font-light leading-none px-2`}>{den}</div>
+          </div>
+        </div>
+      );
+    }
+  };
+
+  const buildCurrentFraction = () => {
+    if (currentInput.numerator && currentInput.denominator) {
+      return `${currentInput.numerator}/${currentInput.denominator}`;
+    }
+    return display;
+  };
+
+  const addFractions = (f1, f2) => {
+    const commonDen = lcm(f1.denominator, f2.denominator);
+    const num1 = f1.numerator * (commonDen / f1.denominator);
+    const num2 = f2.numerator * (commonDen / f2.denominator);
+    return { numerator: num1 + num2, denominator: commonDen };
+  };
+
+  const subtractFractions = (f1, f2) => {
+    const commonDen = lcm(f1.denominator, f2.denominator);
+    const num1 = f1.numerator * (commonDen / f1.denominator);
+    const num2 = f2.numerator * (commonDen / f2.denominator);
+    return { numerator: num1 - num2, denominator: commonDen };
+  };
+
+  const multiplyFractions = (f1, f2) => {
+    return { 
+      numerator: f1.numerator * f2.numerator, 
+      denominator: f1.denominator * f2.denominator 
+    };
+  };
+
+  const divideFractions = (f1, f2) => {
+    if (f2.numerator === 0) return { numerator: 0, denominator: 1 };
+    return { 
+      numerator: f1.numerator * f2.denominator, 
+      denominator: f1.denominator * f2.numerator 
+    };
+  };
+
+  const handleNumerator = (num) => {
+    if (waitingForNewInput) {
+      setCurrentInput({ numerator: num, denominator: '' });
+      setInputMode('fraction');
+      setWaitingForNewInput(false);
+    } else if (inputMode === 'fraction') {
+      setCurrentInput({ ...currentInput, numerator: currentInput.numerator + num });
+    } else {
+      setCurrentInput({ numerator: num, denominator: '' });
+      setInputMode('fraction');
+    }
+  };
+
+  const handleDenominator = (num) => {
+    if (inputMode === 'fraction') {
+      const newDenominator = currentInput.denominator + num;
+      setCurrentInput({ ...currentInput, denominator: newDenominator });
+      
+      if (currentInput.numerator && newDenominator) {
+        const fractionStr = `${currentInput.numerator}/${newDenominator}`;
+        setDisplay(fractionStr);
+      }
+    }
+  };
+
+  const handleWholeNumber = (num) => {
+    if (waitingForNewInput) {
+      setDisplay(num);
+      setWaitingForNewInput(false);
+      setInputMode('whole');
+      setCurrentInput({ numerator: '', denominator: '' });
+    } else if (inputMode === 'whole') {
+      setDisplay(display === '0' ? num : display + num);
+    }
+  };
+
+  const handleOperation = (op) => {
+    let currentValue = display;
+    
+    if (inputMode === 'fraction' && currentInput.numerator && currentInput.denominator) {
+      currentValue = buildCurrentFraction();
+    }
+    
+    const current = parseFraction(currentValue);
+    
+    if (previousValue !== null && operation !== null && !waitingForNewInput) {
+      const prev = parseFraction(previousValue);
+      let result;
+      
+      switch (operation) {
+        case '+':
+          result = addFractions(prev, current);
+          break;
+        case '-':
+          result = subtractFractions(prev, current);
+          break;
+        case '×':
+          result = multiplyFractions(prev, current);
+          break;
+        case '÷':
+          result = divideFractions(prev, current);
+          break;
+        default:
+          result = current;
+      }
+      
+      const formatted = formatFraction(result.numerator, result.denominator);
+      setDisplay(formatted);
+      setPreviousValue(formatted);
+    } else {
+      setPreviousValue(currentValue);
+    }
+    
+    setOperation(op);
+    setWaitingForNewInput(true);
+    setInputMode('whole');
+    setCurrentInput({ numerator: '', denominator: '' });
+  };
+
+  const handleEquals = () => {
+    let currentValue = display;
+    
+    if (inputMode === 'fraction' && currentInput.numerator && currentInput.denominator) {
+      currentValue = buildCurrentFraction();
+    }
+    
+    if (previousValue !== null && operation !== null) {
+      const prev = parseFraction(previousValue);
+      const current = parseFraction(currentValue);
+      let result;
+      
+      switch (operation) {
+        case '+':
+          result = addFractions(prev, current);
+          break;
+        case '-':
+          result = subtractFractions(prev, current);
+          break;
+        case '×':
+          result = multiplyFractions(prev, current);
+          break;
+        case '÷':
+          result = divideFractions(prev, current);
+          break;
+        default:
+          result = current;
+      }
+      
+      const formatted = formatFraction(result.numerator, result.denominator);
+      setDisplay(formatted);
+      setPreviousValue(null);
+      setOperation(null);
+      setWaitingForNewInput(true);
+      setInputMode('whole');
+      setCurrentInput({ numerator: '', denominator: '' });
+    }
+  };
+
+  const handleClear = () => {
+    setDisplay('0');
+    setPreviousValue(null);
+    setOperation(null);
+    setWaitingForNewInput(false);
+    setInputMode('whole');
+    setCurrentInput({ numerator: '', denominator: '' });
+  };
+
+  const handleDelete = () => {
+    if (inputMode === 'fraction') {
+      if (currentInput.denominator) {
+        // Remove last character from denominator
+        const newDenominator = currentInput.denominator.slice(0, -1);
+        setCurrentInput({ ...currentInput, denominator: newDenominator });
+      } else if (currentInput.numerator) {
+        // Remove last character from numerator
+        const newNumerator = currentInput.numerator.slice(0, -1);
+        setCurrentInput({ ...currentInput, numerator: newNumerator });
+        if (newNumerator === '') {
+          setInputMode('whole');
+          setCurrentInput({ numerator: '', denominator: '' });
+        }
+      }
+    } else if (inputMode === 'whole') {
+      if (display.length > 1) {
+        setDisplay(display.slice(0, -1));
+      } else {
+        setDisplay('0');
+      }
+    }
+  };
+
+  const handlePlusMinus = () => {
+    if (inputMode === 'whole') {
+      const current = parseFloat(display);
+      setDisplay((-current).toString());
+    }
+  };
+
+  const KeypadButton = ({ onClick, children, variant = 'default', className = '' }) => {
+    const variants = {
+      default: 'bg-gray-200 hover:bg-gray-300 text-gray-800',
+      numerator: 'bg-blue-100 hover:bg-blue-200 text-blue-800',
+      denominator: 'bg-green-100 hover:bg-green-200 text-green-800',
+      operation: 'bg-orange-400 hover:bg-orange-500 text-white',
+      clear: 'bg-red-400 hover:bg-red-500 text-white',
+      equals: 'bg-orange-500 hover:bg-orange-600 text-white font-bold'
+    };
+
+    return (
+      <button
+        onClick={onClick}
+        className={`h-12 w-12 rounded-lg text-lg font-medium transition-colors flex items-center justify-center ${variants[variant]} ${className}`}
+      >
+        {children}
+      </button>
+    );
+  };
+
+  const currentDisplayFraction = parseFraction(inputMode === 'fraction' && currentInput.numerator && currentInput.denominator ? buildCurrentFraction() : display);
+  const previousDisplayFraction = previousValue ? parseFraction(previousValue) : null;
+
+  return (
+    <div className="max-w-lg mx-auto mt-4 p-6 bg-gradient-to-b from-gray-100 to-gray-200 rounded-2xl shadow-xl">
+      {/* Header */}
+      <div className="text-center mb-4">
+        <div className="text-sm font-bold text-gray-600 bg-gray-300 rounded-full px-4 py-1 inline-block">
+          FRACTION PLUS
+        </div>
+      </div>
+      
+      {/* Display */}
+      <div className="bg-teal-100 rounded-lg p-6 mb-6 min-h-[120px] flex flex-col justify-center border-2 border-teal-200">
+        <div className="text-center">
+          {previousValue && operation && (
+            <div className="text-gray-600 mb-3 flex items-center justify-center gap-3">
+              <FractionDisplay 
+                numerator={previousDisplayFraction.numerator} 
+                denominator={previousDisplayFraction.denominator} 
+                size="small"
+              />
+              <span className="text-xl">{operation}</span>
+            </div>
+          )}
+          
+          <div className="flex justify-center items-center">
+            {inputMode === 'fraction' ? (
+              <FractionDisplay 
+                numerator={currentInput.numerator} 
+                denominator={currentInput.denominator}
+                size="large"
+                showAsInput={true}
+              />
+            ) : (
+              <FractionDisplay 
+                numerator={currentDisplayFraction.numerator} 
+                denominator={currentDisplayFraction.denominator}
+                size="large"
+              />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Controls */}
+      <div className="flex gap-4 mb-4">
+        <KeypadButton onClick={handleClear} variant="clear" className="w-16">
+          C
+        </KeypadButton>
+        <KeypadButton onClick={handlePlusMinus} variant="default" className="w-16">
+          +/-
+        </KeypadButton>
+        <KeypadButton onClick={handleDelete} variant="default" className="w-16">
+          ⌫
+        </KeypadButton>
+        <div className="flex-1"></div>
+      </div>
+
+      {/* Dual Keypad Layout */}
+      <div className="grid grid-cols-2 gap-6 mb-4">
+        {/* Numerator Keypad */}
+        <div>
+          <div className="text-xs font-bold text-blue-600 mb-2 text-center">NUMERATOR</div>
+          <div className="grid grid-cols-3 gap-2">
+            <KeypadButton onClick={() => handleNumerator('1')} variant="numerator">1</KeypadButton>
+            <KeypadButton onClick={() => handleNumerator('2')} variant="numerator">2</KeypadButton>
+            <KeypadButton onClick={() => handleNumerator('3')} variant="numerator">3</KeypadButton>
+            <KeypadButton onClick={() => handleNumerator('4')} variant="numerator">4</KeypadButton>
+            <KeypadButton onClick={() => handleNumerator('5')} variant="numerator">5</KeypadButton>
+            <KeypadButton onClick={() => handleNumerator('6')} variant="numerator">6</KeypadButton>
+            <KeypadButton onClick={() => handleNumerator('7')} variant="numerator">7</KeypadButton>
+            <KeypadButton onClick={() => handleNumerator('8')} variant="numerator">8</KeypadButton>
+            <KeypadButton onClick={() => handleNumerator('9')} variant="numerator">9</KeypadButton>
+            <KeypadButton onClick={() => handleNumerator('0')} variant="numerator" className="col-span-2">0</KeypadButton>
+            <div></div>
+          </div>
+        </div>
+
+        {/* Denominator Keypad */}
+        <div>
+          <div className="text-xs font-bold text-green-600 mb-2 text-center">DENOMINATOR</div>
+          <div className="grid grid-cols-3 gap-2">
+            <KeypadButton onClick={() => handleDenominator('1')} variant="denominator">1</KeypadButton>
+            <KeypadButton onClick={() => handleDenominator('2')} variant="denominator">2</KeypadButton>
+            <KeypadButton onClick={() => handleDenominator('3')} variant="denominator">3</KeypadButton>
+            <KeypadButton onClick={() => handleDenominator('4')} variant="denominator">4</KeypadButton>
+            <KeypadButton onClick={() => handleDenominator('5')} variant="denominator">5</KeypadButton>
+            <KeypadButton onClick={() => handleDenominator('6')} variant="denominator">6</KeypadButton>
+            <KeypadButton onClick={() => handleDenominator('7')} variant="denominator">7</KeypadButton>
+            <KeypadButton onClick={() => handleDenominator('8')} variant="denominator">8</KeypadButton>
+            <KeypadButton onClick={() => handleDenominator('9')} variant="denominator">9</KeypadButton>
+            <KeypadButton onClick={() => handleDenominator('0')} variant="denominator" className="col-span-2">0</KeypadButton>
+            <div></div>
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-gray-300 pt-4"></div>
+
+      {/* Whole Number Keypad */}
+      <div className="mb-4">
+        <div className="text-xs font-bold text-gray-600 mb-2 text-center">WHOLE NUMBERS</div>
+        <div className="flex justify-center">
+          <div className="grid grid-cols-5 gap-2 w-fit">
+            <KeypadButton onClick={() => handleWholeNumber('1')}>1</KeypadButton>
+            <KeypadButton onClick={() => handleWholeNumber('2')}>2</KeypadButton>
+            <KeypadButton onClick={() => handleWholeNumber('3')}>3</KeypadButton>
+            <KeypadButton onClick={() => handleWholeNumber('4')}>4</KeypadButton>
+            <KeypadButton onClick={() => handleWholeNumber('5')}>5</KeypadButton>
+            <KeypadButton onClick={() => handleWholeNumber('6')}>6</KeypadButton>
+            <KeypadButton onClick={() => handleWholeNumber('7')}>7</KeypadButton>
+            <KeypadButton onClick={() => handleWholeNumber('8')}>8</KeypadButton>
+            <KeypadButton onClick={() => handleWholeNumber('9')}>9</KeypadButton>
+            <div></div>
+            <KeypadButton onClick={() => handleWholeNumber('0')} className="col-span-2">0</KeypadButton>
+            <div></div>
+            <div></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Operations */}
+      <div className="flex justify-center">
+        <div className="grid grid-cols-5 gap-2 w-fit">
+          <KeypadButton onClick={() => handleOperation('+')} variant="operation">
+            <Plus size={16} />
+          </KeypadButton>
+          <KeypadButton onClick={() => handleOperation('-')} variant="operation">
+            <Minus size={16} />
+          </KeypadButton>
+          <KeypadButton onClick={() => handleOperation('×')} variant="operation">
+            <X size={16} />
+          </KeypadButton>
+          <KeypadButton onClick={() => handleOperation('÷')} variant="operation">
+            <Divide size={16} />
+          </KeypadButton>
+          <KeypadButton onClick={handleEquals} variant="equals">
+            <Equal size={16} />
+          </KeypadButton>
+        </div>
+      </div>
+
+      {/* Instructions */}
+      <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+        <strong>How to use:</strong>
+        <br />• <strong>Fractions:</strong> Use blue keypad for numerator, green for denominator
+        <br />• <strong>Whole numbers:</strong> Use the bottom gray keypad
+        <br />• <strong>Mixed numbers:</strong> Enter whole number first, then use fraction keypads
+      </div>
+    </div>
+  );
+};
+
+export default FractionCalculator;
